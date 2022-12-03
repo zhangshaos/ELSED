@@ -1,6 +1,8 @@
 #ifndef ELSED_ELSED_H_
 #define ELSED_ELSED_H_
 
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <ostream>
 
 #include "FullSegmentInfo.h"

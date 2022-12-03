@@ -349,7 +349,7 @@ void ELSED::drawAnchorPoints(const uint8_t *dirImg,
         }
 
         valid = nOriInliers > nOriOutliers;
-        saliency = nOriInliers;
+        saliency = (float)nOriInliers;
       }
     } else {
       saliency = segLength(detectedSeg.getEndpoints());

@@ -1,6 +1,9 @@
 #ifndef ELSED_UTILS_H_
 #define ELSED_UTILS_H_
 
+
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <ostream>
 #include <opencv2/opencv.hpp>
 

@@ -1,13 +1,26 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.12.0)
 project(ELSED)
 
+set(CMAKE_CXX_STANDARD 17)
+if (MSVC)
+    add_compile_options(/MP /utf-8 /bigobj)
+endif()
+
 find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
 
-file(GLOB_RECURSE LIB_SOURCES "src/*.cpp" "src/*.h")
-include_directories(src/include)
-add_library(elsed ${LIB_SOURCES})
-target_link_libraries(elsed ${OpenCV_LIBS})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
-add_executable(elsed_main src/main.cpp)
-target_link_libraries(elsed_main elsed ${OpenCV_LIBS})
+add_library(ELSED STATIC
+        src/FullSegmentInfo.cpp
+        src/ELSED.cpp
+        src/EdgeDrawer.cpp)
+target_include_directories(ELSED PUBLIC src ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(ELSED PUBLIC ${OpenCV_LIBS})
+
+add_executable(ELSED_main example/main.cpp)
+target_link_libraries(ELSED_main PRIVATE ELSED)
+
+add_executable(SEG_main example/SegMain.cpp)
+target_link_libraries(SEG_main PRIVATE ELSED)
