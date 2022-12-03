@@ -10,6 +10,7 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include <ELSED.h>
+#include "Npy2cvMat.h"
 
 
 cv::Mat CV_Imread1920x1080(const std::string& file)
@@ -49,16 +50,33 @@ drawEdges(cv::Mat &img,
 }
 
 
+
+
+
 /**
  * 主要函数2
  * 读取RGB图片file，运行ELSED算法检测所有线段。
  * 如果!cMap.empty，还会筛除掉那些纹理线：假设纹理线上所有像素的对应cMap.ID完全一致。
  * @param file
+ * @param clustersMap CV_32S
  * @return cv:Mat CV_8U
  */
-cv::Mat createLineMapFromFile(const std::string& file, const cv::Mat &cMap=cv::Mat())
+cv::Mat createLineMapFromFile(const std::string& file,
+                              const cv::Mat &clustersMap=cv::Mat())
 {
   auto colorImg = CV_Imread1920x1080(file);
+  const int Rows = colorImg.size[0], Cols = colorImg.size[1];
+  cv::Mat cMap;
+  if (!clustersMap.empty())
+  {
+    assert(clustersMap.type() == CV_32S);
+    assert(Rows >= clustersMap.size[0] && Cols >= clustersMap.size[1]);
+    if (Rows > clustersMap.size[0] && Cols > clustersMap.size[1])
+    {
+      cv::resize(clustersMap, cMap, cv::Size(Cols, Rows), 0, 0, cv::INTER_NEAREST);
+    }
+    assert(Rows == cMap.size[0] && Cols == cMap.size[1]);
+  }
   upm::ELSED lineDetector;
   //upm::Segments segs = lineDetector.detect(colorImg);
   upm::ImageEdges edges = lineDetector.detectEdges(colorImg);
@@ -69,7 +87,6 @@ cv::Mat createLineMapFromFile(const std::string& file, const cv::Mat &cMap=cv::M
   //cv::imshow("Segs", colorMap1);
   //cv::imshow("Edges", colorMap2);
   //cv::waitKey();
-  const int Rows = colorImg.size[0], Cols = colorImg.size[1];
   cv::Mat result(Rows, Cols, CV_8U, cv::Scalar_<uint8_t>(0));
   for (const auto& e : edges)
   {
@@ -80,16 +97,29 @@ cv::Mat createLineMapFromFile(const std::string& file, const cv::Mat &cMap=cv::M
         result.at<uint8_t>(px.y, px.x) = (uint8_t) -1;
     else
     {
-      int deltaY = e.back().y - e.front().y,
-          deltaX = e.back().x - e.front().x;
+      //计算每个像素应该向两侧偏移的距离(y0,x0)和(y1,x1)
+      const float deltaY = float(e.back().y - e.front().y),
+                  deltaX = float(e.back().x - e.front().x);
+      const float Radius = sqrt(5.991f);//5.991 is our ORB_SLAM2 error threshold
+      const float dy = (deltaY / sqrt(deltaY * deltaY + deltaX * deltaX)) * Radius,
+                  dx = (deltaX / sqrt(deltaY * deltaY + deltaX * deltaX)) * Radius;
+      const float y0 = -dx, x0 = dy, y1 = dx, x1 = -dy;//(dy,dx) 分别逆时针、顺时针转动90°
       //检测边e两侧的类型(cMap.ID)是否一致
-      bool isTexture = true;
+      size_t nDiffSide = 0;
       for (const auto &px: e)
       {
-
+        int iy0 = int(px.y + 0.5f + y0),
+            ix0 = int(px.x + 0.5f + x0),
+            iy1 = int(px.y + 0.5f + y1),
+            ix1 = int(px.x + 0.5f + x1);
+        if (0 <= iy0 && iy0 < Rows && 0 <= ix0 && ix0 < Cols &&
+            0 <= iy1 && iy1 < Rows && 0 <= ix1 && ix1 < Cols &&
+            cMap.at<int32_t>(iy0, ix0) != cMap.at<int32_t>(iy1, ix1))
+          ++nDiffSide;
       }
-      if (!isTexture)
-        for (const auto &px: e)
+      if (nDiffSide > size_t(0.2f * e.size()))
+        //如果边缘e上有足够多的像素左右不一致，则表明e是一条结构线而不是纹理线
+        for (const auto &px : e)
           result.at<uint8_t>(px.y, px.x) = (uint8_t) -1;
     }
   }
@@ -263,8 +293,13 @@ int segmentPlaneClusters(cv::Mat &cMap, const cv::Mat &lineMap)
 
 int main(int argc, char* argv[])
 {
-  auto grayImg = createLineMapFromFile("../images/1_scene.png");
-  cv::imshow("Gray", grayImg);
-  cv::waitKey();
+  cv::Mat clustersMap = cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_clusters.npy)",
+                                           CV_32S);
+  auto grayImg = createLineMapFromFile("../images/1_scene.png", clustersMap);
+  cv::imwrite("../images/out1.png", grayImg);
+  grayImg = createLineMapFromFile("../images/1_scene.png");
+  cv::imwrite("../images/out0.png", grayImg);
+  //cv::imshow("Gray", grayImg);
+  //cv::waitKey();
   return 0;
 }
