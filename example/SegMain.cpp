@@ -11,6 +11,7 @@
 
 #include <ELSED.h>
 #include "Npy2cvMat.h"
+#include "Debug.h"
 
 
 cv::Mat CV_Imread1920x1080(const std::string& file)
@@ -62,31 +63,29 @@ drawEdges(cv::Mat &img,
  * @return cv:Mat CV_8U
  */
 cv::Mat createLineMapFromFile(const std::string& file,
-                              const cv::Mat &clustersMap=cv::Mat())
+                              const cv::Mat &cMap=cv::Mat())
 {
+  assert(cMap.empty() || cMap.type()==CV_32S);
   auto colorImg = CV_Imread1920x1080(file);
-  const int Rows = colorImg.size[0], Cols = colorImg.size[1];
-  cv::Mat cMap;
-  if (!clustersMap.empty())
-  {
-    assert(clustersMap.type() == CV_32S);
-    assert(Rows >= clustersMap.size[0] && Cols >= clustersMap.size[1]);
-    if (Rows > clustersMap.size[0] && Cols > clustersMap.size[1])
-    {
-      cv::resize(clustersMap, cMap, cv::Size(Cols, Rows), 0, 0, cv::INTER_NEAREST);
-    }
-    assert(Rows == cMap.size[0] && Cols == cMap.size[1]);
-  }
+  int Rows = colorImg.size[0], Cols = colorImg.size[1];
+  assert(cMap.empty() || (Rows>=cMap.size[0] && Cols>=cMap.size[1]));
   upm::ELSED lineDetector;
-  //upm::Segments segs = lineDetector.detect(colorImg);
   upm::ImageEdges edges = lineDetector.detectEdges(colorImg);
-  //auto colorMap1 = colorImg.clone(),
-  //     colorMap2 = colorImg.clone();
-  //drawSegments(colorMap1, segs, CV_RGB(0, 255, 0), 1);
-  //drawEdges(colorMap2, edges, CV_RGB(0, 255, 0));
-  //cv::imshow("Segs", colorMap1);
-  //cv::imshow("Edges", colorMap2);
-  //cv::waitKey();
+  if (!cMap.empty() && Rows > cMap.size[0] && Cols > cMap.size[1])
+  {
+    //线段检测结果放缩到cMap大小
+    double scaleY = (double)cMap.size[0] / Rows,
+           scaleX = (double)cMap.size[1] / Cols;
+    Rows = cMap.size[0];
+    Cols = cMap.size[1];
+    for (auto& e : edges)
+      for (auto& px : e)
+      {
+        px.y = int((px.y + 0.5) * scaleY);
+        px.x = int((px.x + 0.5) * scaleX);
+      }
+  }
+  //绘制edge热图result
   cv::Mat result(Rows, Cols, CV_8U, cv::Scalar_<uint8_t>(0));
   for (const auto& e : edges)
   {
@@ -236,6 +235,12 @@ int segmentPlaneClusters(cv::Mat &cMap, const cv::Mat &lineMap)
   for (int i=0; i<Rows; ++i)
     for (int j=0; j<Cols; ++j)
     {
+      std::cout
+      << "Cur: "
+      << i
+      << ','
+      << j
+      << ". ";
       // 计算当前像素resultCls.at<int32_t>(i, j)的类别。
       //
       // 两个像素联通，必须符合以下条件：
@@ -245,26 +250,204 @@ int segmentPlaneClusters(cv::Mat &cMap, const cv::Mat &lineMap)
       std::set<int> connectedCls;//与当前像素联通的像素，他们的类别应该被合并
       int minConnectedCls = std::numeric_limits<int>::max();
       for (const Pxi32_t& yxOff :{Pxi32_t{0,-1},
-                                  /*Pxi32_t{-1,-1},*/
+                                  Pxi32_t{-1,-1},
                                   Pxi32_t{-1,0},
-                                  /*Pxi32_t{-1,1}*/})
+                                  Pxi32_t{-1,1}})
       {
         int targetY = i + yxOff.first, targetX = j + yxOff.second;
-        if (0 <= targetY && targetY < Rows && 0 <= targetX && targetX < Cols &&
-            cMap.at<int32_t>(targetY, targetX) == cMap.at<int32_t>(i, j) &&
-            lineMap.at<uchar>(targetY, targetX) <= 0)
+        if (0 <= targetY && targetY < Rows &&
+            0 <= targetX && targetX < Cols)
         {
-          int32_t C = resultCls.at<int32_t>(targetY, targetX);
-          assert(C >= 0);
-          connectedCls.emplace(C);
-          if (C < minConnectedCls)
-            minConnectedCls = C;
+          if (cMap.at<int32_t>(targetY, targetX) == cMap.at<int32_t>(i, j)) {
+            if (true || lineMap.at<uint8_t>(targetY, targetX) <= 0) {
+              int32_t C = resultCls.at<int32_t>(targetY, targetX);
+              assert(C >= 0);
+              connectedCls.emplace(C);
+              if (C < minConnectedCls)
+                minConnectedCls = C;
+            }
+          }
         }
       }
-      if (minConnectedCls >= std::numeric_limits<int>::max())
+      std::cout
+      << minConnectedCls
+      << ' ';
+      if (connectedCls.empty())
       {
         //新类别
-        assert(connectedCls.empty());
+        mergeCls.tryInsertClass(nextCls);
+        resultCls.at<int32_t>(i, j) = nextCls++;
+      }
+      else
+      {
+        if (connectedCls.size() > 1)
+          for(int C : connectedCls)
+            if (C != minConnectedCls)
+              mergeCls.unionClass(minConnectedCls, C);
+        resultCls.at<int32_t>(i, j) = minConnectedCls;
+      }
+      std::cout
+      << "class ID="
+      << resultCls.at<int32_t>(i, j)
+      << '\n';
+    }
+  std::vector<uint32_t> shrinkClass;
+  int nCls = (int)mergeCls.shrink(&shrinkClass);
+  // second pass
+  for (int i=0; i<Rows; ++i)
+    for (int j=0; j<Cols; ++j)
+    {
+      int32_t C = resultCls.at<int32_t>(i, j);
+      resultCls.at<int32_t>(i, j) = (int)shrinkClass[C];
+    }
+  swap(cMap, resultCls);
+  return nCls;
+}
+
+
+//PASS
+void test()
+{
+  cv::Mat clustersMap(5, 5, CV_32S, -1);
+  clustersMap.at<int32_t>(2,1) = 0;
+  clustersMap.at<int32_t>(3,1) = 0;
+  clustersMap.at<int32_t>(4,0) = 1;
+  clustersMap.at<int32_t>(4,1) = 1;
+  clustersMap.at<int32_t>(4,2) = 1;
+  clustersMap.at<int32_t>(4,3) = 1;
+  clustersMap.at<int32_t>(4,4) = 2;
+  clustersMap.at<int32_t>(3,4) = 2;
+  clustersMap.at<int32_t>(2,4) = 2;
+  clustersMap.at<int32_t>(3,2) = 3;
+  clustersMap.at<int32_t>(2,2) = 3;
+  clustersMap.at<int32_t>(1,2) = 3;
+  clustersMap.at<int32_t>(1,1) = 3;
+  clustersMap.at<int32_t>(0,1) = 3;
+  clustersMap.at<int32_t>(0,2) = 3;
+  std::cout << clustersMap << std::endl;
+  DrawClusters("../images/clusters0.png", clustersMap);
+  cv::Mat grayImg(5, 5, CV_8U, cv::Scalar_<uint8_t>(0));
+  grayImg.at<uint8_t>(0,0) = -1;
+  grayImg.at<uint8_t>(1,0) = -1;
+  grayImg.at<uint8_t>(2,0) = -1;
+  grayImg.at<uint8_t>(3,0) = -1;
+  grayImg.at<uint8_t>(0,2) = -1;
+  grayImg.at<uint8_t>(1,2) = -1;
+  grayImg.at<uint8_t>(2,2) = -1;
+  grayImg.at<uint8_t>(3,2) = -1;
+  grayImg.at<uint8_t>(3,3) = -1;
+  grayImg.at<uint8_t>(3,4) = -1;
+  std::cout << grayImg << std::endl;
+  auto N = segmentPlaneClusters(clustersMap, grayImg);
+  std::cout << "Number of Classes: " << N << '\n';
+  DrawClusters("../images/clusters1.png", clustersMap);
+}
+
+
+cv::Mat cv32F3To32FC3(const cv::Mat& m, const cv::Mat& mask)
+{
+  assert(m.type() == CV_32F);
+  assert(mask.type() == CV_8U);
+  cv::Mat o(m.size[0], m.size[1], CV_32FC3);
+  for (int i=0; i<m.size[0]; ++i)
+    for (int j=0; j<m.size[1]; ++j)
+    {
+      if (mask.at<uint8_t>(i, j) <= 1)
+      {
+        o.at<cv::Vec3f>(i, j) = {1, 0, 0};//指向照片内部
+      } else
+      {
+        o.at<cv::Vec3f>(i, j)[0] = m.at<float>(i, j, 0);
+        o.at<cv::Vec3f>(i, j)[1] = m.at<float>(i, j, 1);
+        o.at<cv::Vec3f>(i, j)[2] = m.at<float>(i, j, 2);
+      }
+    }
+  return o;
+}
+
+
+//法向量聚类方法
+void testNormalClustering()
+{
+  cv::Mat normalMap = cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\55_normal.npy)",
+                                         CV_32F);
+  cv::Mat mask = cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\55_mask.npy)",
+                                    CV_8U);
+  normalMap = cv32F3To32FC3(normalMap, mask);
+  DrawNormals("../images/normals.png", normalMap);
+  using Pxi32_t = std::pair<int,int>;
+  const int Rows = normalMap.size[0], Cols = normalMap.size[1];
+  auto isValidIndex = [&Rows,&Cols](int y, int x)->bool
+  {
+    return 0 <= y && y < Rows && 0 <= x && x < Cols;
+  };
+  //法向归一化
+  for (int i=0; i<Rows; ++i)
+    for (int j=0; j<Cols; ++j)
+    {
+      const auto& v3 = normalMap.at<cv::Vec3f>(i, j);
+      normalMap.at<cv::Vec3f>(i, j) = cv::normalize(v3);
+    }
+  // first pass
+  SimpleNumberUnion mergeCls;
+  cv::Mat resultCls(Rows, Cols, CV_32S, -1);
+  int nextCls = 0;
+  for (int i=0; i<Rows; ++i)
+    for (int j=0; j<Cols; ++j)
+    {
+      // 计算当前像素resultCls.at<int32_t>(i, j)的类别。
+      //
+      // 两个像素联通，必须符合以下条件：
+      // 0.L-inf距离为1
+      // 1.对应cMap聚类图中同一个聚类中心
+      // 2.被比较的那个像素不处于边缘图lineMap上
+      std::set<int> connectedCls;//与当前像素联通的像素，他们的类别应该被合并
+      int minConnectedCls = std::numeric_limits<int>::max();
+      for (const Pxi32_t& yxOff :{Pxi32_t{0,-1},
+                                  Pxi32_t{-1,-1},
+                                  Pxi32_t{-1,0},
+                                  Pxi32_t{-1,1}})
+      {
+        int targetY = i + yxOff.first, targetX = j + yxOff.second;
+        if (isValidIndex(targetY, targetX))
+        {
+          //计算targetYX和ij的曲率
+          bool isContinued = true;
+          {
+            const cv::Vec3f v0 = isValidIndex(targetY + yxOff.first, targetX + yxOff.second) ?
+              normalMap.at<cv::Vec3f>(targetY + yxOff.first, targetX + yxOff.second) :
+              normalMap.at<cv::Vec3f>(targetY, targetX);
+            const cv::Vec3f v1 = normalMap.at<cv::Vec3f>(targetY, targetX);
+            const cv::Vec3f v2 = normalMap.at<cv::Vec3f>(i, j);
+            const cv::Vec3f v3 = isValidIndex(i - yxOff.first, j - yxOff.second) ?
+              normalMap.at<cv::Vec3f>(i - yxOff.first, j - yxOff.second) :
+              normalMap.at<cv::Vec3f>(i, j);
+//            const double cos0 = v0.dot(v1), cos1 = v1.dot(v2), cos2 = v2.dot(v3);
+//            const double ang0 = std::max(acos(cos0), CV_PI/180),
+//                         ang1 = std::max(acos(cos1), CV_PI/180),
+//                         ang2 = std::max(acos(cos2), CV_PI/180);
+//            const double r0 = ang0 / ang1, r1 = ang1 / ang2;//r0,r1都在'1'附近
+//            isContinued = abs(r0 - r1) < std::max(r0, r1) * 0.1;
+
+            const cv::Vec3f v1Mean = cv::normalize(v0 + v1);
+            const cv::Vec3f v2Mean = cv::normalize(v2 + v3);
+            isContinued = acos(v1Mean.dot(v2Mean)) < 10 * CV_PI / 180;
+
+//            isContinued = acos(v0.dot(v3)) < 10 * CV_PI / 180;
+          }
+          if (isContinued)
+          {
+            int32_t C = resultCls.at<int32_t>(targetY, targetX);
+            assert(C >= 0);
+            connectedCls.emplace(C);
+            if (C < minConnectedCls)
+              minConnectedCls = C;
+          }
+        }
+      }//检测(i,j)与周围像素的连通性
+      if (connectedCls.empty())
+      {
+        //新类别
         mergeCls.tryInsertClass(nextCls);
         resultCls.at<int32_t>(i, j) = nextCls++;
       }
@@ -280,26 +463,56 @@ int segmentPlaneClusters(cv::Mat &cMap, const cv::Mat &lineMap)
   std::vector<uint32_t> shrinkClass;
   int nCls = (int)mergeCls.shrink(&shrinkClass);
   // second pass
+  std::map<uint32_t, size_t> classCounter;//记录每个类别的元素（像素）个数
   for (int i=0; i<Rows; ++i)
     for (int j=0; j<Cols; ++j)
     {
       int32_t C = resultCls.at<int32_t>(i, j);
-      resultCls.at<int32_t>(i, j) = (int)shrinkClass[C];
+      C = (int32_t)shrinkClass[C];
+      resultCls.at<int32_t>(i, j) = C;
+      if (classCounter.count(C))
+        ++classCounter.at(C);
+      else
+        classCounter[C] = 1;
     }
-  return nCls;
+  std::cout << "nClass = " << nCls << '\n';
+  // resultCls...
+  DrawClusters("../images/normalClusters.png", resultCls);
+  for (const auto& [c, n] : classCounter)
+  {
+    std::cout
+    << "Class="
+    << c
+    << ", Count="
+    << n
+    << '\n';
+  }
+  //todo：需要对相邻的像素点（两者对应类别的计数在一个数量级之内）做合并
 }
-
 
 
 int main(int argc, char* argv[])
 {
-  cv::Mat clustersMap = cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_clusters.npy)",
-                                           CV_32S);
-  auto grayImg = createLineMapFromFile("../images/1_scene.png", clustersMap);
-  cv::imwrite("../images/out1.png", grayImg);
-  grayImg = createLineMapFromFile("../images/1_scene.png");
-  cv::imwrite("../images/out0.png", grayImg);
-  //cv::imshow("Gray", grayImg);
-  //cv::waitKey();
+  try {
+    testNormalClustering();
+//    cv::Mat clustersMap = cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_clusters.npy)",
+//                                             CV_32S);
+//    DrawClusters("../images/clusters0.png", clustersMap);
+//    std::cout << "Number of original Clusters: " << max<int32_t>(clustersMap) << '\n';
+//    auto grayImg = createLineMapFromFile("../images/1_scene.png", clustersMap);
+//    auto N = segmentPlaneClusters(clustersMap, grayImg);
+//    std::cout << "Number of Classes: " << N << '\n';
+//    DrawClusters("../images/clusters1.png", clustersMap);
+//    //cv::imwrite("../images/out1.png", grayImg);
+//    //grayImg = createLineMapFromFile("../images/1_scene.png");
+//    //cv::imwrite("../images/out0.png", grayImg);
+//    //cv::imshow("Gray", grayImg);
+//    //cv::waitKey();
+  } catch (const std::exception& e) {
+    std::cout << e.what() << std::endl;
+  } catch (...)
+  {
+    std::cout << "Unknown Error!" << std::endl;
+  }
   return 0;
 }

@@ -94,6 +94,8 @@ blobFromNPY(const std::string &path, int rtype=CV_32F) {
     sType = "<i4";
   else if (rtype == CV_32F)
     sType = "<f4";
+  else if (rtype == CV_8U)
+    sType = "|u1";
   else
     CV_Assert("Not support now!");
   CV_Assert(getType(header) == sType);
