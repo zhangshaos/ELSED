@@ -3,7 +3,9 @@
 #include <opencv2/opencv.hpp>
 #include "ELSED.h"
 
-cv::Mat CV_Imread1920x1080(const std::string& file)
+
+inline cv::Mat
+CV_Imread1920x1080(const std::string& file)
 {
   cv::Mat img = cv::imread(file);
   cv::resize(img, img, cv::Size(1440, 1080), 0, 0, cv::INTER_NEAREST);
@@ -12,6 +14,7 @@ cv::Mat CV_Imread1920x1080(const std::string& file)
   //cv::resize(img, img, cv::Size(256, 192), 0, 0, cv::INTER_NEAREST);
   return img;
 }
+
 
 inline void
 drawSegments(cv::Mat img,
@@ -24,6 +27,7 @@ drawSegments(cv::Mat img,
   for (const upm::Segment &seg: segs)
     cv::line(img, cv::Point2f(seg[0], seg[1]), cv::Point2f(seg[2], seg[3]), color, thickness, lineType, shift);
 }
+
 
 int main() {
   std::cout << "******************************************************" << std::endl;
