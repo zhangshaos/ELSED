@@ -58,11 +58,11 @@ void testSegmentByLines() {
 void testDetectPlanes() {
   using Pxi32_t = std::pair<int, int>;
   cv::Mat colorImg =
-    zxm::CV_Imread1920x1440(R"(../images/55_scene.png)", cv::IMREAD_COLOR, cv::INTER_NEAREST);
+    zxm::CV_Imread1920x1440(R"(../images/1_scene.png)", cv::IMREAD_COLOR, cv::INTER_NEAREST);
   cv::Mat mask =
-    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\55_mask.npy)", CV_8U);
+    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_mask.npy)", CV_8U);
   cv::Mat normalMap =
-    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\55_normal.npy)", CV_32F);
+    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_normal.npy)", CV_32F);
   normalMap = zxm::CV_Convert32FTo32FC3(normalMap, mask);
   zxm::DrawNormals("../dbg/inNormals.png", normalMap);
   //
@@ -80,6 +80,8 @@ int main(int argc, char *argv[]) {
     //
     testDetectPlanes();
     zxm::CheckMathError();
+    //
+    //testRaster();
   } catch (const std::exception &e) {
     std::cout << e.what() << std::endl;
   } catch (...) {

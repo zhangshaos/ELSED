@@ -78,7 +78,7 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
           */
           /*const cv::Vec3f &v2 = normalMap.at<cv::Vec3f>(i, j);*/
           const cv::Vec3f v3 = isValidIndex(i - yxOff.first, j - yxOff.second) ?
-            normalMap.at<cv::Vec3f>(i - yxOff.first, j - yxOff.second) : v2;
+                               normalMap.at<cv::Vec3f>(i - yxOff.first, j - yxOff.second) : v2;
           //
           isContinued = (isContinuedAngle(v1, v2) &&
                          isContinuedAngle(v2, v3) &&
@@ -135,6 +135,133 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
 }
 
 
+namespace zxm {
+  // 当斜率0<k<1是的中值画线法(ix0,iy0)->(ix1,iy1)
+  std::vector<upm::Pixel>
+  raster_core(int iy0, int ix0, int iy1, int ix1) {
+    std::vector<upm::Pixel> result;
+    double k = double(iy1 - iy0) / (ix1 - ix0);
+    double b = (iy1 + 0.5) - k * (ix1 + 0.5);
+    result.emplace_back(ix0, iy0);
+    int y = iy0;
+    for (int x = ix0; x < ix1; ++x) {
+      double midX = x + 1.5, midY = y + 1.0;
+      double d = k * midX + b - midY;
+      if (d >= 0)
+        ++y;
+      result.emplace_back(x + 1, y);
+    }//over
+    return result;
+  }
+
+  std::vector<upm::Pixel>
+  raster(int iy0, int ix0, int iy1, int ix1) {
+    using namespace std;
+    if (ix0 > ix1) {
+      //保证(ix0,iy0)是在x-y坐标系更靠左侧
+      swap(ix0, ix1);
+      swap(iy0, iy1);
+    }
+    std::vector<upm::Pixel> result;
+    if (iy1 == iy0) {
+      //横线
+      for (int i = ix0; i <= ix1; ++i)
+        result.emplace_back(i, iy0);
+    } else if (ix1 == ix0) {
+      //纵线
+      if (iy0 > iy1)
+        swap(iy0, iy1);//保证iy0在底端
+      for (int i = iy0; i <= iy1; ++i)
+        result.emplace_back(ix0, i);
+    } else {
+      if (iy1 - iy0 == ix1 - ix0) {
+        // k==1
+        for (int i = ix0; i <= ix1; ++i)
+          result.emplace_back(i, iy0 + (i - ix0));
+      } else if (iy1 - iy0 == ix0 - ix1) {
+        // k==-1
+        for (int i = ix0; i <= ix1; ++i)
+          result.emplace_back(i, iy0 - (i - ix0));
+      } else {
+        //只处理直线斜率k属于(0,1)之间的情况
+        double k = double(iy1 - iy0) / (ix1 - ix0);
+        if (0 < k && k < 1)
+          result = raster_core(iy0, ix0, iy1, ix1);
+        else if (k > 1) {
+          //交换xy轴
+          result = raster_core(ix0, iy0, ix1, iy1);
+          std::for_each(std::execution::seq,
+                        result.begin(),
+                        result.end(),
+                        [](upm::Pixel &px) {
+                          swap(px.x, px.y);
+                        });
+        } else if (k > -1 && k < 0) {
+          //x轴翻转，y -> -y
+          result = raster_core(-iy0, ix0, -iy1, ix1);
+          std::for_each(std::execution::seq,
+                        result.begin(),
+                        result.end(),
+                        [](upm::Pixel &px) {
+                          px.y *= -1;
+                        });
+        } else if (k < -1) {
+          //x轴翻转，然后交换xy轴
+          result = raster_core(ix0, -iy0, ix1, -iy1);
+          std::for_each(std::execution::seq,
+                        result.begin(),
+                        result.end(),
+                        [](upm::Pixel &px) {
+                          swap(px.x, px.y);
+                          px.y *= -1;
+                        });
+        } else
+          throw std::logic_error("zxm::raster() Impossible!");
+      }
+    }
+    if (result.size() > 1)
+      return result;
+    else
+      return {};
+  }
+}
+
+
+// 测试zxm::raster()算法
+static void TestRaster() {
+  auto l1 = zxm::raster(17, 121, 1, 1),
+    l2 = zxm::raster(120, 77, 23, 23),
+    l3 = zxm::raster(100, 1, 97, 33),
+    l4 = zxm::raster(97, 11, 37, 29),
+    l5 = zxm::raster(100, 34, 100, 100),
+    l6 = zxm::raster(77, 120, 11, 120);
+  std::cout << l1.front().y << ' ' << l1.front().x << ' ' << l1.back().y << ' ' << l1.back().x
+            << " Should be " << "1 1 17 121" << '\n';
+  std::cout << l2.front().y << ' ' << l2.front().x << ' ' << l2.back().y << ' ' << l2.back().x
+            << " Should be " << "23 23 120 77" << '\n';
+  std::cout << l3.front().y << ' ' << l3.front().x << ' ' << l3.back().y << ' ' << l3.back().x
+            << " Should be " << "100 1 97 33" << '\n';
+  std::cout << l4.front().y << ' ' << l4.front().x << ' ' << l4.back().y << ' ' << l4.back().x
+            << " Should be " << "97 11 37 29" << '\n';
+  std::cout << l5.front().y << ' ' << l5.front().x << ' ' << l5.back().y << ' ' << l5.back().x
+            << " Should be " << "100 34 100 100" << '\n';
+  std::cout << l6.front().y << ' ' << l6.front().x << ' ' << l6.back().y << ' ' << l6.back().x
+            << " Should be " << "11 120 77 120" << '\n';
+  std::cout << std::endl;
+  auto vs = l1;
+  vs.insert(vs.end(), l2.begin(), l2.end());
+  vs.insert(vs.end(), l3.begin(), l3.end());
+  vs.insert(vs.end(), l4.begin(), l4.end());
+  vs.insert(vs.end(), l5.begin(), l5.end());
+  vs.insert(vs.end(), l6.begin(), l6.end());
+  cv::Mat result(192, 256, CV_8U, cv::Scalar_<uint8_t>(0));
+  for (const auto v: vs) {
+    result.at<uint8_t>(v.y, v.x) = 0xff;
+  }
+  zxm::CV_ImWriteWithPath("../dbg/raster.png", result);
+}
+
+
 cv::Mat zxm::CreateStructureLinesMap(const cv::Mat &colorImg,
                                      const cv::Mat &normalMap) {
   CV_Assert(colorImg.type() == CV_8UC3);
@@ -144,20 +271,20 @@ cv::Mat zxm::CreateStructureLinesMap(const cv::Mat &colorImg,
 
   int Rows = colorImg.size[0], Cols = colorImg.size[1];
   upm::ELSED lineDetector;
-  upm::ImageEdges edges = lineDetector.detectEdges(colorImg);
-  //todo：更好的划线算法，而不是直接放缩
+  auto edges = lineDetector.detectEdges(colorImg);
   if (Rows > normalMap.size[0] && Cols > normalMap.size[1]) {
     //线段检测结果放缩到normalMap大小
-    double
-      scaleY = (double) normalMap.size[0] / Rows,
-      scaleX = (double) normalMap.size[1] / Cols;
+    const float
+      scaleY = (float) normalMap.size[0] / Rows,
+      scaleX = (float) normalMap.size[1] / Cols;
     Rows = normalMap.size[0];
     Cols = normalMap.size[1];
-    for (auto &e: edges)
+    for (auto &e: edges) {
       for (auto &px: e) {
         px.y = int((px.y + 0.5) * scaleY);
         px.x = int((px.x + 0.5) * scaleX);
       }
+    }
   }
   //判断线段是纹理线还是结构线（两侧深度or深度不一致）：用法向量代理深度检测结构线会有一点问题。
   auto isDiffSide = [&normalMap](int iy0, int ix0, int iy1, int ix1) {
@@ -279,14 +406,14 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
       bool found = false;
       for (const Pxi32_t &yxOff: {Pxi32_t{0, -1},
                                   Pxi32_t{-1, 0},
-                                  Pxi32_t{0,  1},
-                                  Pxi32_t{1,  0}}) {
+                                  Pxi32_t{0, 1},
+                                  Pxi32_t{1, 0}}) {
         int targetY = i + yxOff.first, targetX = j + yxOff.second;
         if (0 <= targetY && targetY < Rows &&
             0 <= targetX && targetX < Cols) {
           int32_t cTarget = clusterMap.at<int32_t>(targetY, targetX);
           int32_t targetLine = lineMap.at<int32_t>(targetY, targetX);
-          if (cTarget==cCur && targetLine<=0) {
+          if (cTarget == cCur && targetLine <= 0) {
             resultCls.at<int32_t>(i, j) = resultCls.at<int32_t>(targetY, targetX);
             found = true;//break do-while
             break;//break for
@@ -302,7 +429,7 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
             0 <= targetX && targetX < Cols) {
           int32_t cTarget = clusterMap.at<int32_t>(targetY, targetX);
           int32_t targetLine = lineMap.at<int32_t>(targetY, targetX);
-          if (cTarget==cCur && targetLine>0) {
+          if (cTarget == cCur && targetLine > 0) {
             resultCls.at<int32_t>(i, j) = resultCls.at<int32_t>(targetY, targetX);
             found = true;//break do-while
             break;//break for
