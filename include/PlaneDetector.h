@@ -33,9 +33,12 @@ namespace zxm
  * 将normalMap按照法向量和像素联通关系（8邻域）进行聚类，并将结果写入clusterMap中
  * @param[out] clusterMap CV_32S
  * @param[in] normalMap CV_32FC3 归一化的法向量图（不含零向量）
+ * @param[in] enableDebug
  * @return 类别数量
  */
-  int ClusteringByNormal(cv::Mat &clusterMap, const cv::Mat &normalMap);
+  int ClusteringByNormal(cv::Mat &clusterMap,
+                         const cv::Mat &normalMap,
+                         bool enableDebug=false);
 
 
 /**

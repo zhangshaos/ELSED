@@ -16,27 +16,24 @@
 #include "PlaneDetector.h"
 
 
-
-
 //PASS
-void testSegmentByLines()
-{
+void testSegmentByLines() {
   cv::Mat clustersMap(5, 5, CV_32S, -1);
-  clustersMap.at<int32_t>(2,1) = 0;
-  clustersMap.at<int32_t>(3,1) = 0;
-  clustersMap.at<int32_t>(4,0) = 1;
-  clustersMap.at<int32_t>(4,1) = 1;
-  clustersMap.at<int32_t>(4,2) = 1;
-  clustersMap.at<int32_t>(4,3) = 1;
-  clustersMap.at<int32_t>(4,4) = 2;
-  clustersMap.at<int32_t>(3,4) = 2;
-  clustersMap.at<int32_t>(2,4) = 2;
-  clustersMap.at<int32_t>(3,2) = 3;
-  clustersMap.at<int32_t>(2,2) = 3;
-  clustersMap.at<int32_t>(1,2) = 3;
-  clustersMap.at<int32_t>(1,1) = 3;
-  clustersMap.at<int32_t>(0,1) = 3;
-  clustersMap.at<int32_t>(0,2) = 3;
+  clustersMap.at<int32_t>(2, 1) = 0;
+  clustersMap.at<int32_t>(3, 1) = 0;
+  clustersMap.at<int32_t>(4, 0) = 1;
+  clustersMap.at<int32_t>(4, 1) = 1;
+  clustersMap.at<int32_t>(4, 2) = 1;
+  clustersMap.at<int32_t>(4, 3) = 1;
+  clustersMap.at<int32_t>(4, 4) = 2;
+  clustersMap.at<int32_t>(3, 4) = 2;
+  clustersMap.at<int32_t>(2, 4) = 2;
+  clustersMap.at<int32_t>(3, 2) = 3;
+  clustersMap.at<int32_t>(2, 2) = 3;
+  clustersMap.at<int32_t>(1, 2) = 3;
+  clustersMap.at<int32_t>(1, 1) = 3;
+  clustersMap.at<int32_t>(0, 1) = 3;
+  clustersMap.at<int32_t>(0, 2) = 3;
   std::cout << clustersMap << std::endl;
   zxm::DrawClusters("../dbg/testSegmentByLines0.png", clustersMap);
   cv::Mat lineMap(5, 5, CV_8U, cv::Scalar_<uint8_t>(0));
@@ -58,15 +55,14 @@ void testSegmentByLines()
 
 
 //PASS法向量聚类方法
-void testDetectPlanes()
-{
-  using Pxi32_t = std::pair<int,int>;
+void testDetectPlanes() {
+  using Pxi32_t = std::pair<int, int>;
   cv::Mat colorImg =
-    zxm::CV_Imread1920x1440(R"(../images/1_scene.png)", cv::IMREAD_COLOR, cv::INTER_NEAREST);
+    zxm::CV_Imread1920x1440(R"(../images/55_scene.png)", cv::IMREAD_COLOR, cv::INTER_NEAREST);
   cv::Mat mask =
-    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_mask.npy)", CV_8U);
+    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\55_mask.npy)", CV_8U);
   cv::Mat normalMap =
-    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\1_normal.npy)", CV_32F);
+    cvDNN::blobFromNPY(R"(E:\VS_Projects\MonoPlanner\example\data\55_normal.npy)", CV_32F);
   normalMap = zxm::CV_Convert32FTo32FC3(normalMap, mask);
   zxm::DrawNormals("../dbg/inNormals.png", normalMap);
   //
@@ -77,18 +73,16 @@ void testDetectPlanes()
 }
 
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char *argv[]) {
   try {
     //PASS
     //testSegmentByLines();
     //
     testDetectPlanes();
     zxm::CheckMathError();
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     std::cout << e.what() << std::endl;
-  } catch (...)
-  {
+  } catch (...) {
     std::cout << "Unknown Error!" << std::endl;
   }
   return 0;
