@@ -58,7 +58,7 @@ void EdgeDrawer::init(const LineDetectionExtraInfoPtr &gradientInfo, cv::Mat &ed
   assert(edgeImage.size() == gradientInfo->gImg.size());
   edgeImg = edgeImage.ptr<uint8_t>();
 
-  pixels.reserve(0.25 * imageWidth * imageHeight);
+  pixels.reserve(size_t(0.25 * imageWidth * imageHeight));
   segments.reserve(imageWidth / 2);
   branchesStack.reserve(100);
 }
@@ -80,7 +80,7 @@ inline void EdgeDrawer::addJunctionPixelsToSegment(const ImageEdge &junctionPixe
         edgeImg[junctionPx.y * imageWidth + junctionPx.x] = UPM_ED_SEGMENT_INLIER_PX;
       }
       pixels.push_back(junctionPx);
-      segment.addPixel(junctionPx.x, junctionPx.y, pixels.size() - 1, addPixelsForTheFirstSide);
+      segment.addPixel(junctionPx.x, junctionPx.y, (int)pixels.size() - 1, addPixelsForTheFirstSide);
     } else {
       edgeImg[junctionPx.y * imageWidth + junctionPx.x] = UPM_ED_SEGMENT_OUTLIER_PX;
     }
@@ -125,7 +125,7 @@ void EdgeDrawer::drawEdgeTreeStack(Pixel anchor, ImageEdge &initialPixels, bool 
     popStack = true;
     DrawingBranch &branch = branchesStack.back();
     // The index of the first pixel that is part of the branch
-    initialPxIndex = pixels.size();
+    initialPxIndex = (int)pixels.size();
     // If we are extending an anchor by its second side, start one pixel before
     if (firstBranch && isAnchorFirstPx) initialPxIndex--;
     direction = branch.direction;
@@ -186,7 +186,7 @@ void EdgeDrawer::drawEdgeTreeStack(Pixel anchor, ImageEdge &initialPixels, bool 
           }
 
           // The pixel is part of the segment, so add it
-          localSegment->addPixel(px.x, px.y, pixels.size() - 1, addPixelsForTheFirstSide);
+          localSegment->addPixel(px.x, px.y, (int)pixels.size() - 1, addPixelsForTheFirstSide);
 
           // Mark the current side as ready to be extended again
           if (addPixelsForTheFirstSide) localSegment->firstEndpointExtended = false;
@@ -757,8 +757,8 @@ bool EdgeDrawer::canSegmentBeExtended(FullSegmentInfo &segment,
       s1 = a * a + 2 * b * b + d * d;
       s2 = std::sqrt(tmp * tmp + 4 * b * b * (a + d) * (a + d));
       eigen_angle = -0.5f * std::atan2(2 * a * b + 2 * b * d, tmp);
-      while (eigen_angle < 0) eigen_angle += M_PI;
-      while (eigen_angle >= M_PI) eigen_angle -= M_PI;
+      while (eigen_angle < 0) eigen_angle += (float)M_PI;
+      while (eigen_angle >= M_PI) eigen_angle -= (float)M_PI;
 
       // This conditions requires the most important eigenvalue to be significantly bigger than the second one
       fitsEigenvaluesCond = std::sqrt((s1 + s2) / (s1 - s2 + 0.00001)) > junctionEigenvalsTh;
@@ -817,7 +817,7 @@ bool EdgeDrawer::findNextPxWithProjection(const int16_t *gradImg,
   int16_t gValue1, gValue2, gValue3, gValue4;
   cv::Point2f extendedPoint, lasPxReproj;
 
-  lasPxReproj = getProjectionPtn(eq, cv::Point2f(px.x, px.y));
+  lasPxReproj = getProjectionPtn(eq, cv::Point2f((float)px.x, (float)px.y));
 
   if (!invertLineDir) {
     extendedPoint.x = lasPxReproj.x - stepSize * eq[1];
@@ -830,8 +830,8 @@ bool EdgeDrawer::findNextPxWithProjection(const int16_t *gradImg,
   if (extendedPoint.x < 0 || extendedPoint.x >= imageWidth || extendedPoint.y < 0 || extendedPoint.y >= imageHeight) {
     return false;
   }
-  int x = extendedPoint.x;
-  int y = extendedPoint.y;
+  int x = (int)extendedPoint.x;
+  int y = (int)extendedPoint.y;
   gValue1 = gradImg[y * imageWidth + x];
   gValue2 = gradImg[y * imageWidth + std::min(x + 1, imageWidth - 1)];
   gValue3 = gradImg[std::min(y + 1, imageHeight - 1) * imageWidth + x];

@@ -111,8 +111,8 @@ class EdgeDrawer {
   const uint8_t *pDirImg;
   uint8_t *edgeImg;
   int imageWidth, imageHeight;
-  float lineFitThreshold = 0.2;
-  float pxToSegmentDistTh = 1.5;
+  float lineFitThreshold = 0.2f;
+  float pxToSegmentDistTh = 1.5f;
   int minLineLength = 15;
   bool treatJunctions = true;
   std::vector<int> listOfJunctionSizes = {5, 7, 9};

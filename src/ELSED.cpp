@@ -62,7 +62,7 @@ void ELSED::processImage(const cv::Mat &_image) {
   }
 
   // Compute the input image derivatives
-  imgInfo = computeGradients(blurredImg, params.gradientThreshold);
+  imgInfo = computeGradients(blurredImg, (short)params.gradientThreshold);
 
   bool anchoThIsZero;
   uint8_t anchorTh = params.anchorThreshold;
@@ -88,8 +88,8 @@ void ELSED::processImage(const cv::Mat &_image) {
   edgeImg = cv::Mat::zeros(imgInfo->imageHeight, imgInfo->imageWidth, CV_8UC1);
   drawer = std::make_shared<EdgeDrawer>(imgInfo,
                                         edgeImg,
-                                        params.lineFitErrThreshold,
-                                        params.pxToSegmentDistTh,
+                                        (float)params.lineFitErrThreshold,
+                                        (float)params.pxToSegmentDistTh,
                                         params.minLineLen,
                                         params.treatJunctions,
                                         params.listJunctionSizes,
@@ -153,12 +153,12 @@ inline void ELSED::computeAnchorPoints(const cv::Mat &dirImage,
 
   // Extract the anchors in the gradient image, store into a vector
   unsigned int pixelNum = imageWidth * imageHeight;
-  unsigned int edgePixelArraySize = pixelNum / (2.5 * scanInterval);
+  unsigned int edgePixelArraySize = pixelNum / (unsigned int)(2.5 * scanInterval);
   anchorPoints.resize(edgePixelArraySize);
 
   int nAnchors = 0;
   int indexInArray;
-  unsigned int w, h;
+  int w, h;
   for (w = 1; w < imageWidth - 1; w += scanInterval) {
     for (h = 1; h < imageHeight - 1; h += scanInterval) {
       indexInArray = h * imageWidth + w;
@@ -204,7 +204,7 @@ void ELSED::clear() {
 }
 
 inline int calculateNumPtsToTrim(int nPoints) {
-  return std::min(5.0, nPoints * 0.1);
+  return std::min(5, int(nPoints * 0.1));
 }
 
 // Linear interpolation. s is the starting value, e the ending value
@@ -319,15 +319,15 @@ void ELSED::drawAnchorPoints(const uint8_t *dirImg,
           // Re-project the point into the segment. To do this, we should move pixel.dot(l)
           // units (the distance between the pixel and the segment) in the direction
           // perpendicular to the segment (perpDir).
-          p = cv::Point2f(px.x, px.y) - perpDir * cv::Vec3f(px.x, px.y, 1).dot(l);
+          p = cv::Point2f((float)px.x, (float)px.y) - perpDir * cv::Vec3f((float)px.x, (float)px.y, 1).dot(l);
           // Get the values around the point p to do the bi-linear interpolation
-          x0 = p.x < 0 ? 0 : p.x;
+          x0 = p.x < 0 ? 0 : (int)p.x;
           if (x0 >= imageWidth) x0 = imageWidth - 1;
-          y0 = p.y < 0 ? 0 : p.y;
+          y0 = p.y < 0 ? 0 : (int)p.y;
           if (y0 >= imageHeight) y0 = imageHeight - 1;
-          x1 = p.x + 1;
+          x1 = (int)p.x + 1;
           if (x1 >= imageWidth) x1 = imageWidth - 1;
-          y1 = p.y + 1;
+          y1 = (int)p.y + 1;
           if (y1 >= imageHeight) y1 = imageHeight - 1;
           //Bi-linear interpolation of Dx and Dy
           lerp_dx = blerp(pDx[y0 * imageWidth + x0], pDx[y0 * imageWidth + x1],

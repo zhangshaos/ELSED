@@ -48,16 +48,23 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
   auto isValidIndex = [&Rows, &Cols](int y, int x) -> bool {
     return 0 <= y && y < Rows && 0 <= x && x < Cols;
   };
+  auto isContinuedAngle = [](const cv::Vec3f &v0, const cv::Vec3f &v1) -> bool {
+    return acos(clamp(v0.dot(v1), -1.f, 1.f)) <= (TH_CONTINUED_ANGLE * CV_PI / 180);
+  };
+  auto isDiscreted = [](const cv::Vec3f &v0, const cv::Vec3f &v1) -> bool {
+    return acos(clamp(v0.dot(v1), -1.f, 1.f)) >= (2 * TH_CONTINUED_ANGLE * CV_PI / 180);
+  };
   // first pass
   ClassUnion mergeCls;
   cv::Mat resultCls(Rows, Cols, CV_32S, -1);
   int nextCls = 0;
-  for (int i = 0; i < Rows; ++i)
+  for (int i = 0; i < Rows; ++i) {
     for (int j = 0; j < Cols; ++j) {
-      std::set<int> connectedCls;//与当前像素联通的像素，他们的类别应该被合并
+      const cv::Vec3f &v2 = normalMap.at<cv::Vec3f>(i, j);
+      std::map<int, cv::Vec3f> connectedCls;//与当前像素联通的像素，他们的类别应该被合并
       int minConnectedCls = std::numeric_limits<int>::max();
       for (const Pxi32_t &yxOff: {Pxi32_t{0, -1},
-                                  Pxi32_t{-1,-1},
+                                  Pxi32_t{-1, -1},
                                   Pxi32_t{-1, 0},
                                   Pxi32_t{-1, 1}}) {
         int targetY = i + yxOff.first, targetX = j + yxOff.second;
@@ -69,19 +76,22 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
             isValidIndex(targetY+yxOff.first, targetX+yxOff.second) && !isOnLine(targetY,targetX) ?
             normalMap.at<cv::Vec3f>(targetY + yxOff.first, targetX + yxOff.second) : v1;
           */
-          const cv::Vec3f &v2 = normalMap.at<cv::Vec3f>(i, j);
-          /*
+          /*const cv::Vec3f &v2 = normalMap.at<cv::Vec3f>(i, j);*/
           const cv::Vec3f v3 = isValidIndex(i - yxOff.first, j - yxOff.second) ?
             normalMap.at<cv::Vec3f>(i - yxOff.first, j - yxOff.second) : v2;
-          */
-          isContinued = acos(clamp(v1.dot(v2), -1.f, 1.f)) <= (TH_CONTINUED_ANGLE * CV_PI / 180);
+          //
+          isContinued = (isContinuedAngle(v1, v2) &&
+                         isContinuedAngle(v2, v3) &&
+                         isContinuedAngle(v1, v3)) ||//保证圆润的角依旧可以区分
+                        (isContinuedAngle(v1, v2) &&
+                         isDiscreted(v2, v3));//找补一些邻近的正面边缘的像素
           zxm::CheckMathError();
           if (isContinued) {
             int32_t C = resultCls.at<int32_t>(targetY, targetX);
             if (C < 0)
               throw std::logic_error("Processed label of (targetY,targetX) should >= 0!"
                                      " in zxm::ClusteringByNormal()");
-            connectedCls.emplace(C);
+            connectedCls.emplace(C, v1);
             if (C < minConnectedCls)
               minConnectedCls = C;
           }
@@ -92,13 +102,19 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
         mergeCls.tryInsertClass(nextCls);
         resultCls.at<int32_t>(i, j) = nextCls++;
       } else {
-        if (connectedCls.size() > 1)
-          for (int C: connectedCls)
-            if (C != minConnectedCls)
-              mergeCls.unionClass(minConnectedCls, C);
+        if (connectedCls.size() > 1) {
+          for (const auto &[C, v1]: connectedCls) {
+            if (C != minConnectedCls) {
+              bool isContinued = isContinuedAngle(v1, v2);
+              if (isContinued)
+                mergeCls.unionClass(minConnectedCls, C);
+            }
+          }
+        }
         resultCls.at<int32_t>(i, j) = minConnectedCls;
       }
     }//one pass over.
+  }
 
   if (enableDebug)
     zxm::DrawClusters("../dbg/RawNormalClusters.png", resultCls);
@@ -106,12 +122,13 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
   std::vector<uint32_t> shrinkClass;
   int nCls = (int) mergeCls.shrink(&shrinkClass);
   // second pass
-  for (int i = 0; i < Rows; ++i)
+  for (int i = 0; i < Rows; ++i) {
     for (int j = 0; j < Cols; ++j) {
       int32_t C = resultCls.at<int32_t>(i, j);
       C = (int32_t) shrinkClass[C];
       resultCls.at<int32_t>(i, j) = C;
     }
+  }
   // resultCls...
   swap(resultCls, clusterMap);
   return nCls;
