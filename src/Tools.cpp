@@ -156,7 +156,7 @@ void zxm::CheckMathError() {
     int err = std::fetestexcept(FE_ALL_EXCEPT);
     if (err == 0)
       return;
-    if (err & FE_INEXACT) {
+    if (err == FE_INEXACT) {
       std::feclearexcept(FE_ALL_EXCEPT);
       //忽视精度丢失的异常
       return;

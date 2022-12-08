@@ -13,7 +13,7 @@ constexpr float TH_CONTINUED_ANGLE = 10.f;
 //结构线提取 CreateStructureLinesMap
 constexpr float TH_DIFF_SIDE_ANGLE = 20.f;
 constexpr float GAP_HALF_DIFF_SIDE = 1.f;
-constexpr float STRUCTURE_LINE_RATIO = 0.4f;
+constexpr float STRUCTURE_LINE_RATIO = 0.45f;
 
 
 #endif //ELSED_HYPERCOMFIG_H

@@ -103,12 +103,11 @@ int zxm::ClusteringByNormal(cv::Mat &clusterMap,
         resultCls.at<int32_t>(i, j) = nextCls++;
       } else {
         if (connectedCls.size() > 1) {
-          for (const auto &[C, v1]: connectedCls) {
-            if (C != minConnectedCls) {
-              bool isContinued = isContinuedAngle(v1, v2);
-              if (isContinued)
-                mergeCls.unionClass(minConnectedCls, C);
-            }
+          const auto &normal0 = connectedCls.at(minConnectedCls);
+          for (const auto &[C, normal1] : connectedCls) {
+            if (C != minConnectedCls && isContinuedAngle(normal0, normal1))
+              //法向量的连通性很难传递！
+              mergeCls.unionClass(minConnectedCls, C);
           }
         }
         resultCls.at<int32_t>(i, j) = minConnectedCls;
@@ -272,6 +271,7 @@ cv::Mat zxm::CreateStructureLinesMap(const cv::Mat &colorImg,
   int Rows = colorImg.size[0], Cols = colorImg.size[1];
   upm::ELSED lineDetector;
   auto edges = lineDetector.detectEdges(colorImg);
+
   if (Rows > normalMap.size[0] && Cols > normalMap.size[1]) {
     //线段检测结果放缩到normalMap大小
     const float
@@ -308,10 +308,10 @@ cv::Mat zxm::CreateStructureLinesMap(const cv::Mat &colorImg,
     const float
       dy = (deltaY / sqrt(deltaY * deltaY + deltaX * deltaX)) * GAP_HALF_DIFF_SIDE,
       dx = (deltaX / sqrt(deltaY * deltaY + deltaX * deltaX)) * GAP_HALF_DIFF_SIDE;
+    zxm::CheckMathError();
     const float
       y0 = -dx, x0 = dy,
       y1 = dx, x1 = -dy;//(dy,dx) 分别逆时针、顺时针转动90°
-    zxm::CheckMathError();
     //检测边e两侧的法向量是否一致
     size_t nDiffSide = 0;
     for (const auto &px: e) {
@@ -324,9 +324,9 @@ cv::Mat zxm::CreateStructureLinesMap(const cv::Mat &colorImg,
           isDiffSide(iy0, ix0, iy1, ix1))
         ++nDiffSide;
     }
-    if (nDiffSide >= size_t(STRUCTURE_LINE_RATIO * e.size())) {
+    if (nDiffSide >= std::max(size_t(STRUCTURE_LINE_RATIO * e.size()), size_t(1))) {
       //如果边缘e上有足够多的像素左右不一致，则表明e是一条结构线而不是纹理线
-      for (const auto &px: e)
+      for (const auto &px : e)
         result.at<int32_t>(px.y, px.x) = startID;
       ++startID;
     }
@@ -348,7 +348,7 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
   ClassUnion mergeCls;
   cv::Mat resultCls(Rows, Cols, CV_32S, -1);
   int nextCls = 0;
-  for (int i = 0; i < Rows; ++i)
+  for (int i = 0; i < Rows; ++i) {
     for (int j = 0; j < Cols; ++j) {
       int32_t cCur = clusterMap.at<int32_t>(i, j);
       int32_t curLine = lineMap.at<int32_t>(i, j);
@@ -384,15 +384,18 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
         mergeCls.tryInsertClass(nextCls);
         resultCls.at<int32_t>(i, j) = nextCls++;
       } else {
-        if (connectedCls.size() > 1)
-          for (int C: connectedCls)
+        if (connectedCls.size() > 1) {
+          for (int C : connectedCls) {
             if (C != minConnectedCls)
               mergeCls.unionClass(minConnectedCls, C);
+          }
+        }
         resultCls.at<int32_t>(i, j) = minConnectedCls;
       }
     }//one pass for all pixels
+  }
   //单独对边界上的像素点处理，赋予类别
-  for (int i = 0; i < Rows; ++i)
+  for (int i = 0; i < Rows; ++i) {
     for (int j = 0; j < Cols; ++j) {
       int32_t cCur = clusterMap.at<int32_t>(i, j);
       int32_t curLine = lineMap.at<int32_t>(i, j);
@@ -442,6 +445,7 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
       mergeCls.tryInsertClass(nextCls);
       resultCls.at<int32_t>(i, j) = nextCls++;
     }//one pass for line pixel
+  }
 
   if (enableDebug)
     zxm::DrawClusters("../dbg/RawLineClusters.png", resultCls);
@@ -449,7 +453,7 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
   std::vector<uint32_t> shrinkClass;
   int nCls = (int) mergeCls.shrink(&shrinkClass);
   // second pass
-  for (int i = 0; i < Rows; ++i)
+  for (int i = 0; i < Rows; ++i) {
     for (int j = 0; j < Cols; ++j) {
       int32_t C = resultCls.at<int32_t>(i, j);
       if (C < 0)
@@ -457,6 +461,7 @@ int zxm::SegmentByLines(cv::Mat &clusterMap,
                                " in zxm::SegmentByLines()");
       resultCls.at<int32_t>(i, j) = (int) shrinkClass[C];
     }
+  }
   swap(clusterMap, resultCls);
   return nCls;
 }

@@ -80,7 +80,7 @@ class FullSegmentInfo {
   inline const Pixel *begin() const { return &((*pixels)[firstPxIndex]); }
 
   // Returns a pointer to the position after the last pixel of the segment
-  inline const Pixel *end() const { return (&((*pixels)[lastPxIndex])) + 1; }
+  inline const Pixel *end() const { return 1 + &((*pixels)[lastPxIndex]); }
 
   inline const cv::Vec3d &getLineEquation() const { return equation; }
 
