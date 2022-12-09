@@ -15,11 +15,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 add_library(ELSED STATIC
         src/FullSegmentInfo.cpp
         src/ELSED.cpp
-        src/EdgeDrawer.cpp
-        src/PlaneDetector.cpp
-        src/Tools.cpp)
+        src/EdgeDrawer.cpp)
 target_include_directories(ELSED
-        PRIVATE src include
+        PRIVATE src
+        PUBLIC include
         PUBLIC ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(ELSED PUBLIC ${OpenCV_LIBS})
 
@@ -27,6 +26,6 @@ add_executable(ELSED_main example/main.cpp)
 target_include_directories(ELSED_main PRIVATE src include)
 target_link_libraries(ELSED_main PRIVATE ELSED)
 
-add_executable(SEG_main example/SegMain.cpp)
-target_include_directories(SEG_main PRIVATE src include)
-target_link_libraries(SEG_main PRIVATE ELSED)
+add_executable(LineDetect_main example/LineDetectMain.cpp)
+target_include_directories(LineDetect_main PRIVATE src include)
+target_link_libraries(LineDetect_main PRIVATE ELSED)
