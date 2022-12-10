@@ -22,6 +22,11 @@ target_include_directories(ELSED
         PUBLIC ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(ELSED PUBLIC ${OpenCV_LIBS})
 
+#################################################
+#                Build Examples                 #
+#################################################
+set(BUILD_EXAMPLE FALSE)
+if(BUILD_EXAMPLE)
 add_executable(ELSED_main example/main.cpp)
 target_include_directories(ELSED_main PRIVATE src include)
 target_link_libraries(ELSED_main PRIVATE ELSED)
@@ -29,3 +34,4 @@ target_link_libraries(ELSED_main PRIVATE ELSED)
 add_executable(ELSED_Line_main example/LineDetectMain.cpp)
 target_include_directories(ELSED_Line_main PRIVATE src include)
 target_link_libraries(ELSED_Line_main PRIVATE ELSED)
+endif()
