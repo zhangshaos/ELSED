@@ -279,78 +279,81 @@ namespace upm {
         if (detectedSeg.getNumOfPixels() < 2) {
           valid = false;
         } else {
-          // Get the segment angle
           Segment s = detectedSeg.getEndpoints();
-          theta = segAngle(s) + M_PI_2;
-          // Force theta to be in range [0, M_PI)
-          while (theta < 0) theta += M_PI;
-          while (theta >= M_PI) theta -= M_PI;
+          valid = segLength(s) >= 1.f;
+          if (valid) {
+            // Get the segment angle
+            theta = segAngle(s) + M_PI_2;
+            // Force theta to be in range [0, M_PI)
+            while (theta < 0) theta += M_PI;
+            while (theta >= M_PI) theta -= M_PI;
 
-          // Calculate the line equation as the cross product os the endpoints
-          cv::Vec3f l = cv::Vec3f(s[0], s[1], 1).cross(cv::Vec3f(s[2], s[3], 1));
-          // Normalize the line direction
-          l /= std::sqrt(l[0] * l[0] + l[1] * l[1]);
-          cv::Point2f perpDir(l[0], l[1]);
+            // Calculate the line equation as the cross product os the endpoints
+            cv::Vec3f l = cv::Vec3f(s[0], s[1], 1).cross(cv::Vec3f(s[2], s[3], 1));
+            // Normalize the line direction
+            l /= std::sqrt(l[0] * l[0] + l[1] * l[1]);
+            cv::Point2f perpDir(l[0], l[1]);
 
-          // For each pixel in the segment compute its angle
-          int nPixelsToTrim = calculateNumPtsToTrim(detectedSeg.getNumOfPixels());
+            // For each pixel in the segment compute its angle
+            int nPixelsToTrim = calculateNumPtsToTrim(detectedSeg.getNumOfPixels());
 
-          Pixel firstPx = detectedSeg.getFirstPixel();
-          Pixel lastPx = detectedSeg.getLastPixel();
+            Pixel firstPx = detectedSeg.getFirstPixel();
+            Pixel lastPx = detectedSeg.getLastPixel();
 
-          nOriInliers = 0;
-          nOriOutliers = 0;
+            nOriInliers = 0;
+            nOriOutliers = 0;
 
-          for (auto px: detectedSeg) {
+            for (auto px: detectedSeg) {
 
-            // If the point is not an inlier avoid it
-            if (edgeImg.at<uint8_t>(px.y, px.x) != UPM_ED_SEGMENT_INLIER_PX) {
-              continue;
-            }
+              // If the point is not an inlier avoid it
+              if (edgeImg.at<uint8_t>(px.y, px.x) != UPM_ED_SEGMENT_INLIER_PX) {
+                continue;
+              }
 
-            endpointDist = detectedSeg.horizontal() ?
-                           std::min(std::abs(px.x - lastPx.x), std::abs(px.x - firstPx.x)) :
-                           std::min(std::abs(px.y - lastPx.y), std::abs(px.y - firstPx.y));
+              endpointDist = detectedSeg.horizontal() ?
+                             std::min(std::abs(px.x - lastPx.x), std::abs(px.x - firstPx.x)) :
+                             std::min(std::abs(px.y - lastPx.y), std::abs(px.y - firstPx.y));
 
-            if (endpointDist < nPixelsToTrim) {
-              continue;
-            }
+              if (endpointDist < nPixelsToTrim) {
+                continue;
+              }
 
 #ifdef UPM_SD_USE_REPROJECTION
-            // Re-project the point into the segment. To do this, we should move pixel.dot(l)
-            // units (the distance between the pixel and the segment) in the direction
-            // perpendicular to the segment (perpDir).
-            p = cv::Point2f(px.x, px.y) - perpDir * cv::Vec3f(px.x, px.y, 1).dot(l);
-            // Get the values around the point p to do the bi-linear interpolation
-            x0 = p.x < 0 ? 0 : p.x;
-            if (x0 >= imageWidth) x0 = imageWidth - 1;
-            y0 = p.y < 0 ? 0 : p.y;
-            if (y0 >= imageHeight) y0 = imageHeight - 1;
-            x1 = p.x + 1;
-            if (x1 >= imageWidth) x1 = imageWidth - 1;
-            y1 = p.y + 1;
-            if (y1 >= imageHeight) y1 = imageHeight - 1;
-            //Bi-linear interpolation of Dx and Dy
-            lerp_dx = blerp(pDx[y0 * imageWidth + x0], pDx[y0 * imageWidth + x1],
-                            pDx[y1 * imageWidth + x0], pDx[y1 * imageWidth + x1],
-                            p.x - int(p.x), p.y - int(p.y));
-            lerp_dy = blerp(pDy[y0 * imageWidth + x0], pDy[y0 * imageWidth + x1],
-                            pDy[y1 * imageWidth + x0], pDy[y1 * imageWidth + x1],
-                            p.x - int(p.x), p.y - int(p.y));
-            // Get the gradient angle
-            angle = std::atan2(lerp_dy, lerp_dx);
+              // Re-project the point into the segment. To do this, we should move pixel.dot(l)
+              // units (the distance between the pixel and the segment) in the direction
+              // perpendicular to the segment (perpDir).
+              p = cv::Point2f(px.x, px.y) - perpDir * cv::Vec3f(px.x, px.y, 1).dot(l);
+              // Get the values around the point p to do the bi-linear interpolation
+              x0 = p.x < 0 ? 0 : p.x;
+              if (x0 >= imageWidth) x0 = imageWidth - 1;
+              y0 = p.y < 0 ? 0 : p.y;
+              if (y0 >= imageHeight) y0 = imageHeight - 1;
+              x1 = p.x + 1;
+              if (x1 >= imageWidth) x1 = imageWidth - 1;
+              y1 = p.y + 1;
+              if (y1 >= imageHeight) y1 = imageHeight - 1;
+              //Bi-linear interpolation of Dx and Dy
+              lerp_dx = blerp(pDx[y0 * imageWidth + x0], pDx[y0 * imageWidth + x1],
+                              pDx[y1 * imageWidth + x0], pDx[y1 * imageWidth + x1],
+                              p.x - int(p.x), p.y - int(p.y));
+              lerp_dy = blerp(pDy[y0 * imageWidth + x0], pDy[y0 * imageWidth + x1],
+                              pDy[y1 * imageWidth + x0], pDy[y1 * imageWidth + x1],
+                              p.x - int(p.x), p.y - int(p.y));
+              // Get the gradient angle
+              angle = std::atan2(lerp_dy, lerp_dx);
 #else
-            indexInArray = px.y * imageWidth + px.x;
+              indexInArray = px.y * imageWidth + px.x;
           angle = std::atan2(pDy[indexInArray], pDx[indexInArray]);
 #endif
-            // Force theta to be in range [0, M_PI)
-            if (angle < 0) angle += M_PI;
-            if (angle >= M_PI) angle -= M_PI;
-            circularDist(theta, angle, M_PI) > validationTh ? nOriOutliers++ : nOriInliers++;
-          }
+              // Force theta to be in range [0, M_PI)
+              if (angle < 0) angle += M_PI;
+              if (angle >= M_PI) angle -= M_PI;
+              circularDist(theta, angle, M_PI) > validationTh ? nOriOutliers++ : nOriInliers++;
+            }
 
-          valid = nOriInliers > nOriOutliers;
-          saliency = nOriInliers;
+            valid = nOriInliers > nOriOutliers;
+            saliency = nOriInliers;
+          }
         }
       } else {
         saliency = segLength(detectedSeg.getEndpoints());
